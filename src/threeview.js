@@ -112,23 +112,21 @@ ThreeModel.register();
 
 const sceneSpec = { };
 window.sceneSpec = sceneSpec; // @@ for debug only
+const cameraTarget = [0, 0, 0];
 function setUpScene() {
     return new Promise(resolve => {
         // adapted from https://threejs.org/examples/webgl2_materials_texture3d.html
         const scene = sceneSpec.scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xdddddd); // 0xffd180);
+        scene.background = new THREE.Color(0xdddddd); // yellow 0xffd180
 
         // Create renderer
         const container = document.getElementById('container');
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('webgl', { antialias: false });
+        const context = canvas.getContext('webgl', { antialias: true });
         const renderer = new THREE.WebGLRenderer({ canvas, context });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.shadowMapEnabled = true;
-        renderer.shadowMapSoft = true;
-        renderer.shadowCameraNear = 3;
-        renderer.shadowCameraFar = 100;
-        renderer.shadowCameraFov = 50;
+        // renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         container.appendChild(renderer.domElement);
 
@@ -145,11 +143,9 @@ function setUpScene() {
         const camera = sceneSpec.camera = new THREE.PerspectiveCamera(75, aspect, cameraNear, cameraFar);
         onWindowResize();
 
-        const cameraTarget = [0, 0, -5];
-
         // create a dummy camera that will be moved by the OrbitControls
         const cameraAvatar = sceneSpec.cameraAvatar = camera.clone();
-        cameraAvatar.position.set(0, 4, 2);
+        cameraAvatar.position.set(0, 4, 7);
         cameraAvatar.lookAt(...cameraTarget);
         cameraAvatar.updateMatrixWorld();
 
@@ -180,16 +176,24 @@ function setUpScene() {
         controls.update();
 
         const light = new THREE.DirectionalLight("#ffffdd");
-        light.position.set(4, 7, 4);
+        light.position.set(3, 5, 5);
         light.castShadow = true;
-        // light.shadow.mapSize.width = 1024;  // default
-        // light.shadow.mapSize.height = 1024; // default
-        // light.shadow.radius = 5;
-        // light.shadow.camera.near = 0.5;    // default
-        // light.shadow.camera.far = 10;     // default
+        const shadowHalf = 3;
+        light.shadow.camera.left = -shadowHalf;
+        light.shadow.camera.right = shadowHalf;
+        light.shadow.camera.top = shadowHalf * 3 / 2;
+        light.shadow.camera.bottom = -shadowHalf / 2;
+        light.shadow.mapSize.width = 4096; // as high as we dare, to avoid banding on objects
+        light.shadow.mapSize.height = 4096;
+        light.shadow.radius = 8; // higher is smoother, but fine shadows get fuzzy
+        light.shadow.camera.near = 0.5;
+        light.shadow.camera.far = 20;
         scene.add(light);
         const ambientLight = new THREE.HemisphereLight("#ddddff", "#ffdddd");
         scene.add(ambientLight);
+
+        // const cameraHelper = new THREE.CameraHelper(light.shadow.camera);
+        // scene.add(cameraHelper);
 
         const floor = new THREE.Mesh(
             // width, height, widthSegments, heightSegments
@@ -311,7 +315,7 @@ class ThreeView extends View {
         const scene = sceneSpec.scene;
         const newView = this.loadedView = new ImportedObjectView(model);
         const obj = newView.threeObj;
-        obj.position.set(0, 1, -5);
+        obj.position.set(cameraTarget[0], 1, cameraTarget[2]);
         scene.add(obj);
     }
 
