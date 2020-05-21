@@ -149,7 +149,7 @@ function setUpScene() {
 
         // create a dummy camera that will be moved by the OrbitControls
         const cameraAvatar = sceneSpec.cameraAvatar = camera.clone();
-        cameraAvatar.position.set(0, 2, 2);
+        cameraAvatar.position.set(0, 4, 2);
         cameraAvatar.lookAt(...cameraTarget);
         cameraAvatar.updateMatrixWorld();
 
@@ -194,7 +194,7 @@ function setUpScene() {
         const floor = new THREE.Mesh(
             // width, height, widthSegments, heightSegments
             new THREE.PlaneGeometry(40,40),
-            new THREE.MeshStandardMaterial({ color: 0x80ffd1, side: THREE.DoubleSide })
+            new THREE.MeshStandardMaterial({ color: 0x80ffd1, side: THREE.BackSide })
             );
         floor.position.y = -0.01;
         floor.rotation.x = Math.PI / 2;
@@ -311,7 +311,7 @@ class ThreeView extends View {
         const scene = sceneSpec.scene;
         const newView = this.loadedView = new ImportedObjectView(model);
         const obj = newView.threeObj;
-        obj.position.set(0, 1, -4);
+        obj.position.set(0, 1, -5);
         scene.add(obj);
     }
 
