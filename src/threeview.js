@@ -1,8 +1,9 @@
 import { Model, View, App, Session } from "@croquet/croquet";
-import { theAssetManager } from "@croquet/loaders";
+import { theAssetManager, ImportedObject, ImportedObjectView, THREE } from "@croquet/loaders";
 
-const THREE = require("three");
-window.THREE = THREE;
+// const THREE = require("three");
+// window.THREE = THREE;
+require('../thirdparty/three/OrbitControls');
 
 /*
 const { GUI } = require('../thirdparty/dat.gui.min');
@@ -61,12 +62,9 @@ extraGuiStyle.innerHTML = `
 document.head.appendChild(extraGuiStyle);
 */
 
-require('../thirdparty/three/OrbitControls');
-
 const TPS = "10";             // reflector ticks per sec x local multiplier
-const THROTTLE = 1000 / 15;   // UI event throttling
+const THROTTLE = 1000 / 25;   // UI event throttling
 const TOUCH = 'ontouchstart' in document.documentElement;
-const RENDER_THROTTLE = TOUCH ? 125 : 100;
 
 // app configuration: whether to process user events before they're reflected.
 // doing so gives faster feedback for the person driving the events, but means
@@ -91,11 +89,14 @@ class ThreeModel extends Model {
         this.cameraPos = null;
         this.cameraQuat = null;
         this.cameraZoom = null;
-        this.subscribe("threeview", "moveCamera", this.moveCamera);
+        this.subscribe(this.id, "moveCamera", this.moveCamera);
+
+        this.loadedObject = null;
     }
 
     addAsset(data) {
-        console.log(data);
+        this.loadedObject = ImportedObject.create(data);
+        this.publish(this.id, "addObject", this.loadedObject);
     }
 
     moveCamera(data) {
@@ -104,68 +105,101 @@ class ThreeModel extends Model {
         if (!this.cameraQuat) this.cameraQuat = new THREE.Quaternion();
         this.cameraQuat.set(...data.quat);
         this.cameraZoom = data.zoom;
-        this.publish("threeview", "cameraMoved", data);
-    }
-
-    selectSlice(data) {
-        this.slice = data.slice;
-        this.publish("threeview", "sliceSelected", data);
-    }
-
-    extendStroke(data) {
-        const { userId, point, slice } = data;
-        let index = this.strokesInProgress[userId];
-        if (index === undefined) {
-            index = this.strokesInProgress[userId] = this.nextStrokeIndex++;
-            this.strokes[index] = { slice, points: [ point ] };
-        } else this.strokes[index].points.push(point);
-    }
-
-    endStroke(data) {
-        const { userId } = data;
-        delete this.strokesInProgress[userId];
-    }
-
-    deleteStroke(index) {
-        delete this.strokes[index]; // assuming it was still there
+        this.publish(this.id, "cameraMoved", data);
     }
 }
 ThreeModel.register();
 
-const sceneSpec = {
-    };
+const sceneSpec = { };
 window.sceneSpec = sceneSpec; // @@ for debug only
 function setUpScene() {
     return new Promise(resolve => {
         // adapted from https://threejs.org/examples/webgl2_materials_texture3d.html
-        const scene = new THREE.Scene();
+        const scene = sceneSpec.scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffd180);
 
         // Create renderer
         const container = document.getElementById('container');
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('webgl', { antialias: false });
+        const context = canvas.getContext('webgl2', { antialias: false });
         const renderer = new THREE.WebGLRenderer({ canvas, context });
         renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMapEnabled = true;
+        renderer.shadowMapSoft = true;
+        renderer.shadowCameraNear = 3;
+        renderer.shadowCameraFar = 100;
+        renderer.shadowCameraFov = 50;
+
         container.appendChild(renderer.domElement);
 
         sceneSpec.render = () => renderer.render(scene, camera);
 
-        // create camera
-        const h = 300; // frustum height - i.e., the image of an object this tall will take up whole vertical extent of window
-        const camera = sceneSpec.camera = new THREE.OrthographicCamera(-h / 2, h / 2, h / 2, -h / 2, 1, 1000); // left & right will be adjusted to suit window
+        // if we want an orthographic camera
+        // const h = 10; // frustum height - i.e., the image of an object this tall will take up whole vertical extent of window
+        // const camera = sceneSpec.camera = new THREE.OrthographicCamera(-h / 2, h / 2, h / 2, -h / 2, 1, 1000); // left & right will be adjusted to suit window
         // camera.up.set(0, 0, 1); // In our data, z is up
-        camera.up.set(0, -1, 0); // ael - not in *our* data, apparently
+
+        const cameraFar = 100;
+        const cameraNear = 0.01;
+        const aspect = window.innerWidth / window.innerHeight;
+        const camera = sceneSpec.camera = new THREE.PerspectiveCamera(75, aspect, cameraNear, cameraFar);
         onWindowResize();
+
+        const cameraTarget = [0, 0, -5];
 
         // create a dummy camera that will be moved by the OrbitControls
         const cameraAvatar = sceneSpec.cameraAvatar = camera.clone();
+        cameraAvatar.position.set(0, 2, 2);
+        cameraAvatar.lookAt(...cameraTarget);
+        cameraAvatar.updateMatrixWorld();
+
+        camera.position.copy(cameraAvatar.position);
+        camera.quaternion.copy(cameraAvatar.quaternion);
+        camera.updateMatrixWorld();
+
+        sceneSpec.initialCameraPos = new THREE.Vector3().copy(camera.position);
+        sceneSpec.initialCameraQuat = new THREE.Quaternion().copy(camera.quaternion);
+        sceneSpec.initialCameraZoom = camera.zoom;
 
         // create controls
         const controls = new THREE.OrbitControls(cameraAvatar, renderer.domElement);
         controls.enablePan = false;
         controls.addEventListener('change', () => sceneSpec.handleControlChange && sceneSpec.handleControlChange());
-        controls.minZoom = 0.5;
-        controls.maxZoom = 4;
+
+        // for orthographic
+        // controls.minZoom = 0.5;
+        // controls.maxZoom = 4;
+
+        // for perspective
+        controls.minDistance = 1;
+        controls.maxDistance = 40;
+
+        controls.zoomSpeed = TOUCH ? 0.5 : 0.25;
+
+        controls.target.set(...cameraTarget);
+        controls.update();
+
+        const light = new THREE.DirectionalLight("#ffffdd");
+        light.position.set(4, 7, 4);
+        light.castShadow = true;
+        // light.shadow.mapSize.width = 1024;  // default
+        // light.shadow.mapSize.height = 1024; // default
+        // light.shadow.radius = 5;
+        // light.shadow.camera.near = 0.5;    // default
+        // light.shadow.camera.far = 100; //10;     // default
+        scene.add(light);
+        const ambientLight = new THREE.HemisphereLight("#ddddff", "#ffdddd");
+        scene.add(ambientLight);
+
+        const floor = new THREE.Mesh(
+            // width, height, widthSegments, heightSegments
+            new THREE.PlaneGeometry(40,40),
+            new THREE.MeshStandardMaterial({ color: 0x80ffd1, side: THREE.DoubleSide })
+            );
+        floor.position.y = -0.01;
+        floor.rotation.x = Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
 
         /*
         document.addEventListener("keydown", evt => {
@@ -174,20 +208,6 @@ function setUpScene() {
         document.addEventListener("keyup", evt => {
             if (evt.key === "Escape") overrideDrawingMode(false);
             if (evt.key === "Backspace") deleteHighlightedStroke(); // if one is highlighted
-            });
-
-        let isPointerDown = false;
-        const reallyDrawing = () => sceneSpec.inDrawingMode && !sceneSpec.drawingOverridden;
-        const cont = document.getElementById('container');
-        cont.addEventListener('pointerdown', evt => {
-            isPointerDown = true;
-            if (reallyDrawing()) startStroke(evt);
-            });
-        cont.addEventListener('pointermove', evt => { if (reallyDrawing()) pointerMove(evt); });
-        cont.addEventListener('pointerup', _evt => {
-            // always ok to end a stroke
-            isPointerDown = false;
-            endStroke();
             });
         */
 
@@ -199,10 +219,13 @@ function setUpScene() {
         function onWindowResize() {
             renderer.setSize(window.innerWidth, window.innerHeight);
 
-            const newAspect = window.innerWidth / window.innerHeight;
-            const frustumHeight = camera.top - camera.bottom;
-            camera.left = -frustumHeight * newAspect / 2;
-            camera.right = frustumHeight * newAspect / 2;
+            camera.aspect = window.innerWidth / window.innerHeight;
+
+            // for orthographic camera
+            // const newAspect = window.innerWidth / window.innerHeight;
+            // const frustumHeight = camera.top - camera.bottom;
+            // camera.left = -frustumHeight * newAspect / 2;
+            // camera.right = frustumHeight * newAspect / 2;
 
             camera.updateProjectionMatrix();
         }
@@ -239,15 +262,14 @@ class ThreeView extends View {
 
         this.model = model;
 
-        this.subscribe("threeview", { event: "cameraMoved", handling: "oncePerFrameWhileSynced" }, this.message_cameraMoved);
+        this.subscribe(this.model.id, "addObject", this.addObject);
+        this.subscribe(this.model.id, { event: "cameraMoved", handling: "oncePerFrameWhileSynced" }, this.cameraMoved);
 
         window.ondragover = event => event.preventDefault();
         const isFileDrop = evt => {
             const dt = evt.dataTransfer;
             for (let i = 0; i < dt.types.length; i++) {
-                if (dt.types[i] === "Files") {
-                    return true;
-                }
+                if (dt.types[i] === "Files") return true;
             }
             return false;
             };
@@ -259,10 +281,38 @@ class ThreeView extends View {
 
         this.lastCameraMove = 0;
         sceneSpec.handleControlChange = () => this.cameraAvatarMoved();
+
+        this.syncCameraWithModel();
+        if (model.loadedObject) this.addObject(model.loadedObject);
     }
 
     handleFileDrop(items) {
         theAssetManager.handleFileDrop(items, this.model, this);
+    }
+
+    detach() {
+        super.detach();
+        this.removeObject();
+        delete sceneSpec.handleControlChange;
+    }
+
+    removeObject() {
+        if (this.loadedView) {
+            sceneSpec.scene.remove(this.loadedView.threeObj);
+            sceneSpec.render();
+            this.loadedView.detach();
+            this.loadedView = null;
+        }
+    }
+
+    addObject(model) {
+        this.removeObject(); // if any
+
+        const scene = sceneSpec.scene;
+        const newView = this.loadedView = new ImportedObjectView(model);
+        const obj = newView.threeObj;
+        obj.position.set(0, 1, -4);
+        scene.add(obj);
     }
 
     // handle a change reported by the OrbitControls, which we've given direct control over
@@ -284,17 +334,15 @@ class ThreeView extends View {
             camera.zoom = cameraAvatar.zoom;
             camera.updateMatrixWorld();
             camera.updateProjectionMatrix();
-
-            sceneSpec.setClipSense();
         }
 
-        this.publish("threeview", "moveCamera", { pos: pos.toArray(), quat: cameraAvatar.quaternion.toArray(), zoom: cameraAvatar.zoom, viewId: this.viewId });
+        this.publish(this.model.id, "moveCamera", { pos: pos.toArray(), quat: cameraAvatar.quaternion.toArray(), zoom: cameraAvatar.zoom, viewId: this.viewId });
     }
 
     // someone has published a message that moves the camera.
     // check whether instant update is happening: if so,
     // and this is a message from here, also ignore it.
-    message_cameraMoved(data) {
+    cameraMoved(data) {
         if (INSTANT_LOCAL_UPDATE && data.viewId === this.viewId) return;
 
         this.syncCameraWithModel(data.viewId);
@@ -311,8 +359,6 @@ class ThreeView extends View {
         camera.updateMatrixWorld();
         camera.updateProjectionMatrix();
 
-        sceneSpec.setClipSense();
-
         // if viewId is supplied, and it's our viewId, this must be an immediate reflection
         // of a message published from here, triggered by movement of the camera avatar.
         // in that case, don't try to force a new position on the avatar.
@@ -322,11 +368,6 @@ class ThreeView extends View {
             cameraAvatar.zoom = camera.zoom;
             cameraAvatar.updateMatrixWorld();
         }
-    }
-
-    detach() {
-        super.detach();
-        delete sceneSpec.handleControlChange;
     }
 }
 
