@@ -116,12 +116,12 @@ function setUpScene() {
     return new Promise(resolve => {
         // adapted from https://threejs.org/examples/webgl2_materials_texture3d.html
         const scene = sceneSpec.scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xffd180);
+        scene.background = new THREE.Color(0xdddddd); // 0xffd180);
 
         // Create renderer
         const container = document.getElementById('container');
         const canvas = document.createElement('canvas');
-        const context = canvas.getContext('webgl2', { antialias: false });
+        const context = canvas.getContext('webgl', { antialias: false });
         const renderer = new THREE.WebGLRenderer({ canvas, context });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.shadowMapEnabled = true;
@@ -186,7 +186,7 @@ function setUpScene() {
         // light.shadow.mapSize.height = 1024; // default
         // light.shadow.radius = 5;
         // light.shadow.camera.near = 0.5;    // default
-        // light.shadow.camera.far = 100; //10;     // default
+        // light.shadow.camera.far = 10;     // default
         scene.add(light);
         const ambientLight = new THREE.HemisphereLight("#ddddff", "#ffdddd");
         scene.add(ambientLight);
@@ -194,7 +194,7 @@ function setUpScene() {
         const floor = new THREE.Mesh(
             // width, height, widthSegments, heightSegments
             new THREE.PlaneGeometry(40,40),
-            new THREE.MeshStandardMaterial({ color: 0x80ffd1, side: THREE.BackSide })
+            new THREE.MeshStandardMaterial({ color: 0xaaaaaa, side: THREE.BackSide, roughness: 1 })
             );
         floor.position.y = -0.01;
         floor.rotation.x = Math.PI / 2;
