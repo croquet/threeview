@@ -1,4 +1,4 @@
-import { Model, View, App, Session } from "@croquet/croquet";
+import { Model, View, App, Session, Messenger } from "@croquet/croquet";
 import { theAssetManager, ImportedObject, ImportedObjectView, THREE } from "@croquet/loaders";
 
 // const THREE = require("three");
@@ -268,6 +268,20 @@ class ThreeView extends View {
 
         this.subscribe(this.model.id, "addObject", this.addObject);
         this.subscribe(this.model.id, { event: "cameraMoved", handling: "oncePerFrameWhileSynced" }, this.cameraMoved);
+
+        if (window.parent !== window) {
+            // assume that we're embedded in Q
+            Messenger.startPublishingPointerMove();
+
+            Messenger.setReceiver(this);
+            Messenger.send("appReady");
+            Messenger.on("appInfoRequest", () => {
+                Messenger.send("appInfo", { appName: "threeview", label: "3D model", iconName: "3d.svgIcon", urlTemplate: "../threeview/?q=${q}" });
+                });
+
+            Messenger.on("userCursor", data => window.document.body.style.setProperty("cursor", data));
+            Messenger.send("userCursorRequest");
+        }
 
         window.ondragover = event => event.preventDefault();
         const isFileDrop = evt => {
