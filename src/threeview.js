@@ -108,7 +108,7 @@ class ThreeModel extends Model {
         this.publish(this.id, "cameraMoved", data);
     }
 }
-ThreeModel.register();
+ThreeModel.register("ThreeModel");
 
 const sceneSpec = { };
 window.sceneSpec = sceneSpec; // @@ for debug only
