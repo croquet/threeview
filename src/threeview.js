@@ -125,7 +125,7 @@ function setUpScene() {
         const context = canvas.getContext('webgl', { antialias: true });
         const renderer = new THREE.WebGLRenderer({ canvas, context });
         renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.shadowMapEnabled = true;
+        renderer.shadowMap.enabled = true;
         // renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
         container.appendChild(renderer.domElement);
@@ -396,7 +396,15 @@ async function go() {
     App.messages = true;
     App.makeWidgetDock();
 
-    const session = await Session.join(`threeview-${App.autoSession()}`, ThreeModel, ThreeView, { step: "manual", tps: TPS, optionsFromUrl: [] });
+    const session = await Session.join({
+        appId: "io.croquet.threeview",
+        name: App.autoSession(),
+        password: App.autoPassword(),
+        model: ThreeModel,
+        view: ThreeView,
+        tps: TPS,
+        step: "manual",
+    });
 
     window.requestAnimationFrame(frame);
     function frame(timestamp) {
