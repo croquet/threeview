@@ -399,7 +399,7 @@ async function go() {
     const session = await Session.join({
         appId: "io.croquet.threeview",
         name: App.autoSession(),
-        password: App.autoPassword(),
+        password: "dummy-pass", // it would be misleading to use autoPassword, suggesting a secure session, while we're not using Croquet.Data
         model: ThreeModel,
         view: ThreeView,
         tps: TPS,
