@@ -1,4 +1,4 @@
-import { Model, View, App, Session, Messenger } from "@croquet/croquet";
+import { Model, View, App, Session, Messenger } from "@croquet/croquet"; // using webpack "externals" redirect
 import { theAssetManager, ImportedObject, ImportedObjectView, THREE } from "@croquet/loaders";
 
 // const THREE = require("three");
@@ -397,6 +397,7 @@ async function go() {
     App.makeWidgetDock();
 
     const session = await Session.join({
+        apiKey: '1_i65fcn11n7lhrb5n890hs3dhj11hfzfej57pvlrx',
         appId: "io.croquet.threeview",
         name: App.autoSession(),
         password: "dummy-pass", // it would be misleading to use autoPassword, suggesting a secure session, while we're not using Croquet.Data
