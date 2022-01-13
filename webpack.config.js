@@ -1,5 +1,4 @@
 const HtmlWebPackPlugin = require('html-webpack-plugin');
-const fetch = require('node-fetch');
 const path = require('path');
 
 module.exports = {
@@ -10,6 +9,11 @@ module.exports = {
         chunkFilename: 'chunk-[name]-[contenthash:8].js',
     },
     devServer: {
+        watchOptions: {
+            ignored: [
+                /.#|~$/
+            ]
+        },
         disableHostCheck: true,
         contentBase: path.join(__dirname, 'dist'),
         publicPath: '/',
