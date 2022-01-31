@@ -249,6 +249,10 @@ class ThreeView extends View {
         if (!model.loadedObject) {
             const search = new URL(window.location).searchParams;
             if (search.get("default")) {
+                // The dataId is taken from a Chrome dev console stpped at addAsset.
+                // You could imagine to have binary data in code, store it on server
+                // and then fetch it down to all clients but it is simply much easier
+                // if it requests a file that is already uploaded.
                 this.publish(this.model.id, "addAsset", {
                     dataId: "3JVTNIubvlqeaQsXeMxCxjYespSkU4mGEYuCNPgDj0xUIj4-OjlwZWUsIyYvOWQ_OWQpOCU7Py8-ZCMlZT9lMB8-PRoFMAw_BRl7ASMtBxAjf3lzMgwODXJ6eGUjJWQpOCU7Py8-ZD4iOC8vPCMvPWU8AyMfCC0lAH05ciUwORMeEg99EhoOIg8Gcy4dPiEnHyEiPXJ-GzMFDhwpZS4rPitlAh0rEiwzcjATEH4OMz5yGx59fDh-PRA_MB0TGiIrJxgNJDwZcg4sIid4Dw",
                     fileName: "/LittlestTokyo.glb",
