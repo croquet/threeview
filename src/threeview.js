@@ -1,68 +1,16 @@
-import { Model, View, App, Session, Messenger } from "@croquet/croquet"; // using webpack "externals" redirect
-import { theAssetManager, ImportedObject, ImportedObjectView, THREE } from "@croquet/loaders";
+import { Model, View, App, Session, Data, Messenger } from "@croquet/croquet";
+import * as THREE from "three";
+import * as fflate from 'fflate';
+import JSZip from 'jszip';
+import {loadThreeJSLib} from "./ThreeJSLibLoader";
+import {AssetManager} from "./assetManager";
 
-// const THREE = require("three");
-// window.THREE = THREE;
-require('../thirdparty/three/OrbitControls');
+// used by AssetManager
+window.THREE = THREE;
+window.JSZip = JSZip;
+window.fflate = fflate;
 
-/*
-const { GUI } = require('../thirdparty/dat.gui.min');
-const extraGuiStyle = document.createElement('style');
-extraGuiStyle.innerHTML = `
-    .dg.ac {
-        -moz-user-select: none;
-        -webkit-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-        z-index: 2;
-    }
-    .dg .croquet-slider-li .property-name {
-        width: 25%;
-    }
-    .dg .croquet-button-li .property-name {
-        width: 50%;
-    }
-    .dg .croquet-button-li .c {
-        width: 50%;
-    }
-    .dg .c {
-        width: 75%;
-    }
-    .dg .slider {
-        margin-left: 0;
-        width: 70%;
-    }
-    .dg .has-slider input[type=text] {
-        width: 25%;
-    }
-    .dg .c input[type=checkbox] {
-        margin-top: 1px;
-        width: 25px;
-        height: 25px;
-    }
-    .dg .c input[type=checkbox]:focus { outline: 0; }
-    button.slice-mover {
-        position: absolute;
-        display: inline-block;
-        width: 13%;
-        height: 23px;
-        top: 2px;
-        font: 600 14px sans-serif;
-        background: #888;
-        color: #fff;
-        border-radius: 8px;
-    }
-    button.slice-mover:focus { outline: 0; }
-    button.slice-mover.highlight-ahead { color: #ff0 }
-    button.slice-mover.highlight-jump { background: #880 }
-    .dg ul.closed button.slice-mover {
-        display: none;
-    }
-`;
-document.head.appendChild(extraGuiStyle);
-*/
-
-const TPS = "10";             // reflector ticks per sec x local multiplier
+const TPS = 10;             // reflector ticks per sec x local multiplier
 const THROTTLE = 1000 / 25;   // UI event throttling
 const TOUCH = 'ontouchstart' in document.documentElement;
 
@@ -84,17 +32,24 @@ class ThreeModel extends Model {
     init(options) {
         super.init(options);
 
-        this.subscribe(this.id, "addAsset", this.addAsset);
-
+        this.loadedObject = null;
         this.cameraPos = null;
         this.cameraQuat = null;
         this.cameraZoom = null;
-        this.subscribe(this.id, "moveCamera", this.moveCamera);
 
-        this.loadedObject = null;
+        this.subscribe(this.id, "addAsset", this.addAsset);
+        this.subscribe(this.id, "moveCamera", this.moveCamera);
     }
 
     addAsset(data) {
+        if (this.loadedObject) {
+            if (data.dataId === this.loadedObject.dataId &&
+                data.loadType === this.loadedObject.loadType) {
+                // to guard the case when a preloaded content is added from code.
+                return;
+            }
+        }
+
         this.loadedObject = ImportedObject.create(data);
         this.publish(this.id, "addObject", this.loadedObject);
     }
@@ -110,14 +65,33 @@ class ThreeModel extends Model {
 }
 ThreeModel.register("ThreeModel");
 
+export class ImportedObject extends Model {
+    init(options) {
+        super.init(options);
+        this.dataId = options.dataId;
+        this.loadType = options.loadType;
+        this.creationTime = this.now();
+    }
+}
+ImportedObject.register("ImportedObject");
+
 const sceneSpec = { };
 window.sceneSpec = sceneSpec; // @@ for debug only
 const cameraTarget = [0, 0, 0];
-function setUpScene() {
+async function setUpScene() {
+    const libs = [
+        "loaders/OBJLoader.js",
+        "loaders/MTLLoader.js",
+        "loaders/GLTFLoader.js",
+        "loaders/FBXLoader.js",
+        "loaders/DRACOLoader.js",
+        "controls/OrbitControls.js",
+    ];
+    await Promise.all(libs.map(lib => loadThreeJSLib(lib, THREE)));
     return new Promise(resolve => {
-        // adapted from https://threejs.org/examples/webgl2_materials_texture3d.html
-        const scene = sceneSpec.scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xdddddd); // yellow 0xffd180
+            // adapted from https://threejs.org/examples/webgl2_materials_texture3d.html
+            const scene = sceneSpec.scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xdddddd); // yellow 0xffd180
 
         // Create renderer
         const container = document.getElementById('container');
@@ -158,7 +132,7 @@ function setUpScene() {
         sceneSpec.initialCameraZoom = camera.zoom;
 
         // create controls
-        const controls = new THREE.OrbitControls(cameraAvatar, renderer.domElement);
+        const controls = new window.THREE.OrbitControls(cameraAvatar, renderer.domElement);
         controls.enablePan = false;
         controls.addEventListener('change', () => sceneSpec.handleControlChange && sceneSpec.handleControlChange());
 
@@ -236,41 +210,24 @@ function setUpScene() {
     });
 }
 
-// a throttle that also ensures that the last value is delivered
-function throttle(fn, delay) {
-    let lastTime = 0;
-    let timeoutForFinal = null;
-    const clearFinal = () => {
-        if (timeoutForFinal) {
-            clearTimeout(timeoutForFinal);
-            timeoutForFinal = null;
-        }
-        };
-    const runFn = (...args) => {
-        clearFinal(); // shouldn't be one, but...
-        lastTime = Date.now();
-        fn(...args);
-        };
-    return (...args) => {
-        clearFinal();
-        const toWait = delay - (Date.now() - lastTime);
-        if (toWait < 0) runFn(...args);
-        else timeoutForFinal = setTimeout(() => runFn(...args), toWait);
-        };
-}
-
 class ThreeView extends View {
-
     constructor(model) {
         super(model);
-
         this.model = model;
+        window.assetManager = this.assetManager = new AssetManager();
+
+        this.assetManager.setupHandlersOn(window, (buffer, fileName, type) => {
+            return Data.store(this.sessionId, buffer, true).then(handle => {
+                const dataId = Data.toId(handle);
+                this.publish(this.model.id, "addAsset", {dataId, fileName, loadType: type});
+            });
+        });
 
         this.subscribe(this.model.id, "addObject", this.addObject);
         this.subscribe(this.model.id, { event: "cameraMoved", handling: "oncePerFrameWhileSynced" }, this.cameraMoved);
 
         if (window.parent !== window) {
-            // assume that we're embedded in Q
+            // assume that we're embedded in Greenlight
             Messenger.startPublishingPointerMove();
 
             Messenger.setReceiver(this);
@@ -283,29 +240,22 @@ class ThreeView extends View {
             Messenger.send("userCursorRequest");
         }
 
-        window.ondragover = event => event.preventDefault();
-        const isFileDrop = evt => {
-            const dt = evt.dataTransfer;
-            for (let i = 0; i < dt.types.length; i++) {
-                if (dt.types[i] === "Files") return true;
-            }
-            return false;
-            };
-        window.ondrop = evt => {
-            evt.preventDefault();
-
-            if (isFileDrop(evt)) this.handleFileDrop(evt.dataTransfer.items);
-            };
-
         this.lastCameraMove = 0;
         sceneSpec.handleControlChange = () => this.cameraAvatarMoved();
 
         this.syncCameraWithModel();
         if (model.loadedObject) this.addObject(model.loadedObject);
-    }
 
-    handleFileDrop(items) {
-        theAssetManager.handleFileDrop(items, this.model, this);
+        if (!model.loadedObject) {
+            const search = new URL(window.location).searchParams;
+            if (search.get("default")) {
+                this.publish(this.model.id, "addAsset", {
+                    dataId: "3JVTNIubvlqeaQsXeMxCxjYespSkU4mGEYuCNPgDj0xUIj4-OjlwZWUsIyYvOWQ_OWQpOCU7Py8-ZCMlZT9lMB8-PRoFMAw_BRl7ASMtBxAjf3lzMgwODXJ6eGUjJWQpOCU7Py8-ZD4iOC8vPCMvPWU8AyMfCC0lAH05ciUwORMeEg99EhoOIg8Gcy4dPiEnHyEiPXJ-GzMFDhwpZS4rPitlAh0rEiwzcjATEH4OMz5yGx59fDh-PRA_MB0TGiIrJxgNJDwZcg4sIid4Dw",
+                    fileName: "/LittlestTokyo.glb",
+                    loadType: "glb"
+                });
+            }
+        }
     }
 
     detach() {
@@ -323,11 +273,11 @@ class ThreeView extends View {
         }
     }
 
-    addObject(model) {
+    addObject(loadedObject) {
         this.removeObject(); // if any
+        const newView = this.loadedView = new ImportedObjectView(loadedObject);
 
         const scene = sceneSpec.scene;
-        const newView = this.loadedView = new ImportedObjectView(model);
         const obj = newView.threeObj;
         obj.position.set(cameraTarget[0], 1, cameraTarget[2]);
         scene.add(obj);
@@ -386,6 +336,73 @@ class ThreeView extends View {
             cameraAvatar.zoom = camera.zoom;
             cameraAvatar.updateMatrixWorld();
         }
+    }
+}
+
+export class ImportedObjectView extends View {
+    constructor(model) {
+        super(model);
+        this.model = model;
+
+        this.threeObj = new THREE.Group();
+        // add a placeholder
+        this.placeHolder = new THREE.Mesh(
+            new THREE.SphereBufferGeometry(0.5, 16, 16),
+            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.1 })
+        );
+        this.threeObj.add(this.placeHolder);
+
+        if (this.model.dataId && this.model.loadType) {
+            this.loadAsset(this.model.dataId, this.model.loadType);
+        }
+    }
+
+    detach() {
+        super.detach();
+        this.animationSpec = null;
+    }
+
+    runAnimation() {
+        const spec = this.animationSpec;
+        if (!spec) return;
+
+        const { mixer, startTime, lastTime } = spec;
+        const now = this.now();
+        const newTime = (now - startTime) / 1000, delta = newTime - lastTime;
+        mixer.update(delta);
+        spec.lastTime = newTime;
+
+        this.future(1000 / 20).runAnimation();
+    }
+
+    objectReady(obj) {
+        this.threeObj.remove(this.placeHolder);
+        const bbox = (new THREE.Box3()).setFromObject(obj);
+        const rawHeight = bbox.max.y - bbox.min.y;
+        const scale = 2 / rawHeight;
+        obj.position.addVectors(bbox.min, bbox.max);
+        obj.position.multiplyScalar(-0.5);
+        obj.traverse(o => o.castShadow = o.receiveShadow = true);
+        this.threeObj.add(obj);
+        this.threeObj.scale.set(scale, scale, scale);
+        // this.publish(this.id, ViewEvents.changedDimensions, {});
+        if (obj._croquetAnimation) {
+            const spec = obj._croquetAnimation;
+            spec.startTime = this.model.creationTime;
+            this.animationSpec = spec;
+            this.future(500).runAnimation();
+        }
+
+        // if (statusDisplay && statusDisplay.hideToast) setTimeout(() => statusDisplay.hideToast(), 1000); // have it hang around even if load was instantaneous
+    }
+
+    loadAsset(dataId, loadType) {
+        const handle = Data.fromId(dataId);
+        return Data.fetch(this.sessionId, handle).then(buffer => {
+            window.assetManager.load(buffer, loadType, THREE).then(obj => {
+                this.objectReady(obj);
+            });
+        });
     }
 }
 

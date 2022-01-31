@@ -1,5 +1,6 @@
 const HtmlWebPackPlugin = require('html-webpack-plugin');
 const path = require('path');
+const webpack = require("webpack");
 
 module.exports = {
     entry : './src/threeview.js',
@@ -8,25 +9,23 @@ module.exports = {
         filename: '[name]-[contenthash:8].js',
         chunkFilename: 'chunk-[name]-[contenthash:8].js',
     },
-    devServer: {
-        watchOptions: {
-            ignored: [
-                /.#|~$/
-            ]
-        },
-        disableHostCheck: true,
-        contentBase: path.join(__dirname, 'dist'),
-        publicPath: '/',
-        port: 9009
+    resolve: {
+        fallback: {
+            "crypto": false,
+            buffer: require.resolve('buffer/'),
+        }
     },
-    // use Croquet loaded via <script>
-    externals: {
-        "@croquet/croquet": "Croquet",
+    devServer: {
+        allowedHosts: "all",
+        port: 9010
     },
     plugins: [
         new HtmlWebPackPlugin({
             template: 'src/index.html',   // input
             filename: 'index.html',   // output filename in dist/
+        }),
+        new webpack.ProvidePlugin({
+            Buffer: ['buffer', 'Buffer']
         }),
     ],
 };
