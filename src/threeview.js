@@ -10,7 +10,6 @@ window.THREE = THREE;
 window.JSZip = JSZip;
 window.fflate = fflate;
 
-const TPS = 10;             // reflector ticks per sec x local multiplier
 const THROTTLE = 1000 / 25;   // UI event throttling
 const TOUCH = 'ontouchstart' in document.documentElement;
 
@@ -424,7 +423,8 @@ async function go() {
         password: "dummy-pass", // it would be misleading to use autoPassword, suggesting a secure session, while we're not using Croquet.Data
         model: ThreeModel,
         view: ThreeView,
-        tps: TPS,
+        tps: 10,
+        eventRateLimit: 60,
         step: "manual",
     });
 
