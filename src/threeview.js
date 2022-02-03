@@ -148,7 +148,7 @@ async function setUpScene() {
         controls.target.set(...cameraTarget);
         controls.update();
 
-        const light = new THREE.DirectionalLight("#ffffdd");
+        const light = new THREE.DirectionalLight("#ddddcc");
         light.position.set(3, 5, 5);
         light.castShadow = true;
         const shadowHalf = 3;
