@@ -5,11 +5,11 @@ export function loadThreeJSLib(lib, THREE) {
     return new Promise((resolve, reject) => {
         let script = document.createElement("script");
         let version = window.__THREE__;
-        script.src = `https://unpkg.com/three@0.${version}/examples/js/${lib}`;
+        script.src = `https://cdn.jsdelivr.net/npm/three@0.${version}/examples/js/${lib}`;
         script.onload = () => {
             return resolve(window.THREE);
         };
         document.body.appendChild(script);
     });
 }
-    
+
