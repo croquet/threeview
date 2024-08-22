@@ -43,10 +43,15 @@
                 touch-action: none;
             }
         </style>
-        <script src="https://code.jquery.com/pep/0.4.3/pep.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@croquet/croquet@2.0.0-17"></script>
+        <script>
+        window.CROQUET_SESSION = {
+            apiKey: "<insert your apiKey from croquet.io/keys>",
+            appId: "io.croquet.threeview",
+        }
+        </script>
     </head>
     <body>
-        <!-- <div id="gui-container"></div> -->
         <div id="container" touch-action="none"></div>
         <!-- <script src="threeview.js"></script>    not needed, given webpack config -->
     </body>

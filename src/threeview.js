@@ -1,4 +1,3 @@
-import { Model, View, App, Session, Data, Messenger } from "@croquet/croquet";
 import * as THREE from "three";
 import * as fflate from 'fflate';
 import JSZip from 'jszip';
@@ -18,9 +17,10 @@ const TOUCH = 'ontouchstart' in document.documentElement;
 // that other users' screens will update noticeably later (by the current reflector
 // round-trip latency).  for demo purposes, having all update together (i.e., local
 // update set to false) is arguably more impressive.
-const INSTANT_LOCAL_UPDATE = true;
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const INSTANT_LOCAL_UPDATE = !URL_PARAMS.has("demo");
 
-class ThreeModel extends Model {
+class ThreeModel extends Croquet.Model {
     static types() {
         return {
             "THREE.Vector3": THREE.Vector3,
@@ -64,7 +64,7 @@ class ThreeModel extends Model {
 }
 ThreeModel.register("ThreeModel");
 
-export class ImportedObject extends Model {
+export class ImportedObject extends Croquet.Model {
     init(options) {
         super.init(options);
         this.dataId = options.dataId;
@@ -209,15 +209,15 @@ async function setUpScene() {
     });
 }
 
-class ThreeView extends View {
+class ThreeView extends Croquet.View {
     constructor(model) {
         super(model);
         this.model = model;
         window.assetManager = this.assetManager = new AssetManager();
 
         this.assetManager.setupHandlersOn(window, (buffer, fileName, type) => {
-            return Data.store(this.sessionId, buffer, true).then(handle => {
-                const dataId = Data.toId(handle);
+            return Croquet.Data.store(this.sessionId, buffer, true).then(handle => {
+                const dataId = Croquet.Data.toId(handle);
                 this.publish(this.model.id, "addAsset", {dataId, fileName, loadType: type});
             });
         });
@@ -226,6 +226,7 @@ class ThreeView extends View {
         this.subscribe(this.model.id, { event: "cameraMoved", handling: "oncePerFrameWhileSynced" }, this.cameraMoved);
 
         if (window.parent !== window) {
+            const { Messenger } = Croquet;
             // assume that we're embedded in Greenlight
             Messenger.startPublishingPointerMove();
 
@@ -243,21 +244,19 @@ class ThreeView extends View {
         sceneSpec.handleControlChange = () => this.cameraAvatarMoved();
 
         this.syncCameraWithModel();
-        if (model.loadedObject) this.addObject(model.loadedObject);
 
-        if (!model.loadedObject) {
-            const search = new URL(window.location).searchParams;
-            if (search.get("default")) {
-                // The dataId is taken from a Chrome dev console stpped at addAsset.
-                // You could imagine to have binary data in code, store it on server
-                // and then fetch it down to all clients but it is simply much easier
-                // if it requests a file that is already uploaded.
-                this.publish(this.model.id, "addAsset", {
-                    dataId: "3JVTNIubvlqeaQsXeMxCxjYespSkU4mGEYuCNPgDj0xUIj4-OjlwZWUsIyYvOWQ_OWQpOCU7Py8-ZCMlZT9lMB8-PRoFMAw_BRl7ASMtBxAjf3lzMgwODXJ6eGUjJWQpOCU7Py8-ZD4iOC8vPCMvPWU8AyMfCC0lAH05ciUwORMeEg99EhoOIg8Gcy4dPiEnHyEiPXJ-GzMFDhwpZS4rPitlAh0rEiwzcjATEH4OMz5yGx59fDh-PRA_MB0TGiIrJxgNJDwZcg4sIid4Dw",
-                    fileName: "/LittlestTokyo.glb",
-                    loadType: "glb"
-                });
-            }
+        if (model.loadedObject) {
+            this.addObject(model.loadedObject);
+        } else if (URL_PARAMS.get("default")) {
+            // The dataId is taken from a Chrome dev console stpped at addAsset.
+            // You could imagine to have binary data in code, store it on server
+            // and then fetch it down to all clients but it is simply much easier
+            // if it requests a file that is already uploaded.
+            this.publish(this.model.id, "addAsset", {
+                dataId: "3JVTNIubvlqeaQsXeMxCxjYespSkU4mGEYuCNPgDj0xUIj4-OjlwZWUsIyYvOWQ_OWQpOCU7Py8-ZCMlZT9lMB8-PRoFMAw_BRl7ASMtBxAjf3lzMgwODXJ6eGUjJWQpOCU7Py8-ZD4iOC8vPCMvPWU8AyMfCC0lAH05ciUwORMeEg99EhoOIg8Gcy4dPiEnHyEiPXJ-GzMFDhwpZS4rPitlAh0rEiwzcjATEH4OMz5yGx59fDh-PRA_MB0TGiIrJxgNJDwZcg4sIid4Dw",
+                fileName: "/LittlestTokyo.glb",
+                loadType: "glb"
+            });
         }
     }
 
@@ -342,7 +341,7 @@ class ThreeView extends View {
     }
 }
 
-export class ImportedObjectView extends View {
+export class ImportedObjectView extends Croquet.View {
     constructor(model) {
         super(model);
         this.model = model;
@@ -400,8 +399,8 @@ export class ImportedObjectView extends View {
     }
 
     loadAsset(dataId, loadType) {
-        const handle = Data.fromId(dataId);
-        return Data.fetch(this.sessionId, handle).then(buffer => {
+        const handle = Croquet.Data.fromId(dataId);
+        return Croquet.Data.fetch(this.sessionId, handle).then(buffer => {
             window.assetManager.load(buffer, loadType, THREE).then(obj => {
                 this.objectReady(obj);
             });
@@ -413,28 +412,36 @@ async function go() {
     // get all the data loaded and prepped before we even attempt to start the session
     await setUpScene();
 
-    App.messages = true;
-    App.makeWidgetDock();
+    Croquet.App.messages = true;
+    Croquet.App.makeWidgetDock();
 
-    const session = await Session.join({
-        apiKey: '1_i65fcn11n7lhrb5n890hs3dhj11hfzfej57pvlrx',
-        appId: "io.croquet.threeview",
-        name: App.autoSession(),
-        password: "dummy-pass", // it would be misleading to use autoPassword, suggesting a secure session, while we're not using Croquet.Data
-        model: ThreeModel,
-        view: ThreeView,
-        tps: 10,
-        eventRateLimit: 60,
-        step: "manual",
-    });
+    if (URL_PARAMS.has("apiKey")) {
+        // allow the apiKey to be passed in as a query parameter
+        window.CROQUET_SESSION.apiKey = URL_PARAMS.get("apiKey");
+    }
 
-    window.requestAnimationFrame(frame);
-    function frame(timestamp) {
+    try {
+        const session = await Croquet.Session.join({
+            ...window.CROQUET_SESSION, // apiKey and appId from index.html
+            model: ThreeModel,
+            view: ThreeView,
+            tps: 10,
+            eventRateLimit: 60,
+            step: "manual",
+        });
+
         window.requestAnimationFrame(frame);
+        function frame(timestamp) {
+            window.requestAnimationFrame(frame);
 
-        session.step(timestamp);
+            session.step(timestamp);
 
-        if (session.view) sceneSpec.render();
+            if (session.view) sceneSpec.render();
+        }
+    } catch (err) {
+        if (err.message.includes("API key")) {
+            console.warn("API key required.  Please provide a valid API key in index.html");
+        } else throw err;
     }
 }
 
